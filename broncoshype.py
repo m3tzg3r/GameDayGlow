@@ -3,85 +3,121 @@
 import requests
 import json
 import socket
-import subprocess
 import time
 import logging
 from datetime import datetime
+from requests.adapters import HTTPAdapter
+from requests.packages.urllib3.util.retry import Retry
+
+# Constants
+LOG_FILE_NAME = 'broncoshype.log'
+TOTAL_DURATION = 8 * 60 * 60  # 8 hours
+INTERVAL = 20  # 20 seconds
+GROUP_ADDR = "239.255.255.250"
+GROUP_PORT = 4001
+TTL = 2
+
+# Figure out correct NFL season year
+today = datetime.now()
+season_year = today.year
+if today.month < 8:   # Jan–Jul belong to the previous season
+    season_year -= 1
+
+API_ENDPOINT = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/7/schedule?season={season_year}"
 
 # Configure logging
-log_file_name = 'broncoshype.log'
-logging.basicConfig(filename=log_file_name, level=logging.INFO,
-                    format='%(asctime)s [%(levelname)s]: %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
+logging.basicConfig(
+    filename=LOG_FILE_NAME,
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s]: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
-def send_razer_command(pt):
-    message = {"msg": {"cmd": "razer", "data": {"pt": pt}}}
-    group = "239.255.255.250"
-    port = 4001
-    ttl = 2
+def send_udp_message(cmd, data=None):
+    """Generic UDP multicast sender for Razer/debug commands."""
+    message = {"msg": {"cmd": cmd, "data": data or {}}}
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, TTL)
     json_result = json.dumps(message)
     logging.info(f"Sending: {json_result}")
-    sock.sendto(bytes(json_result, "utf-8"), (group, port))
+    sock.sendto(json_result.encode("utf-8"), (GROUP_ADDR, GROUP_PORT))
+    sock.close()
 
-def send_message():
-    message = {"msg": {"cmd": "status", "data": {}}}
-    group = "239.255.255.250"
-    port = 4001
-    ttl = 2
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
-    json_result = json.dumps(message)
-    logging.info(f"Sending: {json_result}")
-    sock.sendto(bytes(json_result, "utf-8"), (group, port))
+def get_with_retries(api_url, retries=3):
+    """HTTP GET with retry logic."""
+    session = requests.Session()
+    retry = Retry(total=retries, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('http://', adapter)
+    session.mount('https://', adapter)
 
-# Function to check if the Denver Broncos are playing today
-def is_denver_broncos_playing(api_url):
     try:
-        # Fetch data from the API endpoint
-        response = requests.get(api_url)
-        response.raise_for_status()  # Raise an exception for HTTP errors
+        response = session.get(api_url)
+        response.raise_for_status()
+        return response
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Failed to retrieve data after {retries} retries: {e}")
+        return None
 
-        # Parse JSON response
+def debug_dump_schedule(data):
+    """Dump ESPN events and show how they align with local/UTC today."""
+    local_today = datetime.now().strftime('%Y-%m-%d')
+    utc_today = datetime.utcnow().strftime('%Y-%m-%d')
+    logging.info(f"Local today: {local_today}")
+    logging.info(f"UTC today:   {utc_today}")
+
+    for event in data.get('events', []):
+        event_date = event.get("date", "").split("T")[0]
+        logging.info(f"Event: {event.get('name')} "
+                     f"id={event.get('id')} "
+                     f"date={event.get('date')} "
+                     f"-> parsed_date={event_date}")
+
+def is_denver_broncos_playing(api_url):
+    """Check if the Denver Broncos have a game today (local or UTC date)."""
+    response = get_with_retries(api_url)
+    if not response:
+        return False
+
+    try:
         data = response.json()
+        debug_dump_schedule(data)
 
-        # Get the current date
-        current_date = datetime.now().strftime('%Y-%m-%dT%H:%MZ')
+        local_today = datetime.now().strftime('%Y-%m-%d')
+        utc_today = datetime.utcnow().strftime('%Y-%m-%d')
+        logging.info(f"Checking against dates: {local_today} (local), {utc_today} (UTC)")
 
-        # Iterate through each event and compare the date with the current date
         for event in data.get('events', []):
-            event_date = event.get('date', 'N/A')
-
-            # Check if the event date is today
-            if event_date == current_date:
+            event_date = event.get('date', '').split('T')[0]
+            if event_date in (local_today, utc_today):
+                logging.info(f"Match found: {event.get('name')} on {event_date}")
                 return True
 
+        logging.info("No events matched today's date")
         return False
 
-    except requests.exceptions.RequestException as e:
-        print(f"Error fetching data from the API: {e}")
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing JSON response: {e}")
         return False
 
-# Check if the Denver Broncos are playing
-api_endpoint = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/7/schedule?season=2025"  # Will need to change this every year based on season
-if is_denver_broncos_playing(api_endpoint):
-    logging.info(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} [INFO]: The Denver Broncos are playing today.")
+# Main execution
+if is_denver_broncos_playing(API_ENDPOINT):
+    logging.info("The Denver Broncos are playing today.")
+    # Activate your backdoor/debug mode
+    send_udp_message("razer", {"pt": "uwABsQEK"})
+    send_udp_message("razer", {"pt": "uwAgsAAKAAD//30AAAD//30AAAD/AAD//30AAAD//30AAAD/IQ=="})
 
-    # Execute the first script
-    send_razer_command("uwABsQEK")
+    num_iterations = TOTAL_DURATION // INTERVAL
+    next_time = time.time()
 
-    # Execute the second script
-    send_razer_command("uwAgsAAKAAD//30AAAD//30AAAD/AAD//30AAAD//30AAAD/IQ==")
+    try:
+        for _ in range(num_iterations):
+            send_udp_message("status")
+            next_time += INTERVAL
+            time.sleep(max(0, next_time - time.time()))
+    except KeyboardInterrupt:
+        logging.info("Interrupted by user")
 
-    # Run the third script in a loop for the specified duration
-    total_duration = 8 * 60 * 60  # 8 hours
-    interval = 30  # 30 seconds
-    num_iterations = total_duration // interval
-
-    for _ in range(num_iterations):
-        send_message()
-        time.sleep(interval)
-
-    logging.info(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} [INFO]: Script executed successfully.")
+    logging.info("Script executed successfully.")
 else:
-    logging.info(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} [INFO]: The Denver Broncos are not playing today.")
+    logging.info("The Denver Broncos are not playing today.")
