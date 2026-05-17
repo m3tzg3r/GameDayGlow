@@ -25,7 +25,6 @@ if today.month < 8:   # Jan–Jul belong to the previous season
 
 API_ENDPOINT = f"https://site.api.espn.com/apis/site/v2/sports/football/nfl/teams/7/schedule?season={season_year}"
 
-# Configure logging
 logging.basicConfig(
     filename=LOG_FILE_NAME,
     level=logging.INFO,
@@ -33,18 +32,33 @@ logging.basicConfig(
     datefmt='%Y-%m-%d %H:%M:%S'
 )
 
-def send_udp_message(cmd, data=None):
-    """Generic UDP multicast sender for Razer/debug commands."""
-    message = {"msg": {"cmd": cmd, "data": data or {}}}
+
+def send_poweron():
+    message = {"msg": {"cmd": "turn", "data": {"value": 1}}}
+    group = GROUP_ADDR
+    port = GROUP_PORT
+    ttl = TTL
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, TTL)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
     json_result = json.dumps(message)
     logging.info(f"Sending: {json_result}")
-    sock.sendto(json_result.encode("utf-8"), (GROUP_ADDR, GROUP_PORT))
+    sock.sendto(bytes(json_result, "utf-8"), (group, port))
+
+
+def send_udp_message(cmd, data=None):
+    message = {"msg": {"cmd": cmd, "data": data or {}}}
+    group = GROUP_ADDR
+    port = GROUP_PORT
+    ttl = TTL
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, ttl)
+    json_result = json.dumps(message)
+    logging.info(f"Sending: {json_result}")
+    sock.sendto(bytes(json_result, "utf-8"), (group, port))
     sock.close()
 
+
 def get_with_retries(api_url, retries=3):
-    """HTTP GET with retry logic."""
     session = requests.Session()
     retry = Retry(total=retries, backoff_factor=0.3, status_forcelist=[500, 502, 503, 504])
     adapter = HTTPAdapter(max_retries=retry)
@@ -52,15 +66,15 @@ def get_with_retries(api_url, retries=3):
     session.mount('https://', adapter)
 
     try:
-        response = session.get(api_url)
+        response = session.get(api_url, timeout=10)
         response.raise_for_status()
         return response
     except requests.exceptions.RequestException as e:
         logging.error(f"Failed to retrieve data after {retries} retries: {e}")
         return None
 
+
 def debug_dump_schedule(data):
-    """Dump ESPN events and show how they align with local/UTC today."""
     local_today = datetime.now().strftime('%Y-%m-%d')
     utc_today = datetime.utcnow().strftime('%Y-%m-%d')
     logging.info(f"Local today: {local_today}")
@@ -73,21 +87,27 @@ def debug_dump_schedule(data):
                      f"date={event.get('date')} "
                      f"-> parsed_date={event_date}")
 
+
 def is_denver_broncos_playing(api_url):
-    """Check if the Denver Broncos have a game today (local or UTC date)."""
     response = get_with_retries(api_url)
     if not response:
         return False
 
     try:
         data = response.json()
+
+        events = data.get('events')
+        if events is None:
+            logging.warning(f"events key missing from API response -- possible API change. Keys present: {list(data.keys())}")
+            return False
+
         debug_dump_schedule(data)
 
         local_today = datetime.now().strftime('%Y-%m-%d')
         utc_today = datetime.utcnow().strftime('%Y-%m-%d')
         logging.info(f"Checking against dates: {local_today} (local), {utc_today} (UTC)")
 
-        for event in data.get('events', []):
+        for event in events:
             event_date = event.get('date', '').split('T')[0]
             if event_date in (local_today, utc_today):
                 logging.info(f"Match found: {event.get('name')} on {event_date}")
@@ -100,10 +120,13 @@ def is_denver_broncos_playing(api_url):
         logging.error(f"Error parsing JSON response: {e}")
         return False
 
-# Main execution
+
 if is_denver_broncos_playing(API_ENDPOINT):
     logging.info("The Denver Broncos are playing today.")
-    # Activate your backdoor/debug mode
+
+    send_poweron()
+    time.sleep(1)
+
     send_udp_message("razer", {"pt": "uwABsQEK"})
     send_udp_message("razer", {"pt": "uwAgsAAKAAD//30AAAD//30AAAD/AAD//30AAAD//30AAAD/IQ=="})
 
