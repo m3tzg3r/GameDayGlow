@@ -36,10 +36,11 @@ These scripts run as cron jobs. The run duration is configurable per script via 
 
 Example:
 
+```
 0 6 * * * /usr/bin/python3 /path/to/avshype.py
 30 6 * * * /usr/bin/python3 /path/to/broncoshype.py
 0 7 * * * /usr/bin/python3 /path/to/nuggetshype.py
-
+```
 
 
 ## Adapting for other teams
