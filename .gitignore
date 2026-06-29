@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.log
+.gdg_panel_claim
+.gdg_panel_claim.tmp
+*.swp
