@@ -8,6 +8,7 @@ coordination (last-to-start-wins) is handled by gdg_wave. Drop-in cron
 replacement for nuggetshype.py.
 """
 import logging
+import os
 import time
 from datetime import datetime
 
@@ -21,7 +22,7 @@ PRIMARY = (255, 205, 0)    # gold
 ACCENT = (25, 95, 235)     # blue
 
 logging.basicConfig(
-    filename=LOG_FILE_NAME,
+    filename=os.path.join(os.path.dirname(os.path.abspath(__file__)), LOG_FILE_NAME),
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s]: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
