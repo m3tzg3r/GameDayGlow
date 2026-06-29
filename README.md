@@ -6,6 +6,12 @@ Automatically sets Govee lights to team colors on game days for the Colorado Ava
 
 Govee has an official API but it requires authentication and a cloud round-trip. These scripts use an undocumented local multicast API that Govee devices listen on over UDP. A debug mode can be unlocked with a key that allows direct color control without cloud authentication. The scripts send a keepalive every 20-30 seconds to prevent the debug session from timing out.
 
+### Keepalive timing
+
+The debug/razer streaming session has a measured inactivity timeout of roughly **60 seconds**: with no packets sent and no other controller active (e.g. the Govee desktop app closed), the panel drops out of debug mode and reverts to its default state after about a minute. The 20-30 second keepalive interval sits comfortably under that timeout. The margin is deliberate -- this is UDP multicast, so a keepalive packet can be dropped silently; a sub-timeout interval means losing one keepalive won't push past the 60s deadline and cause a mid-game revert.
+
+Note: if the Govee desktop app is running with Razer Chroma Connect active, the app streams its own color state to the panel continuously, which will both keep the session alive and override these scripts. The scripts assume no app is running (e.g. a headless Raspberry Pi), which is the normal cron deployment.
+
 This all happens on your local network. No cloud, no login, no Govee account required once the device is on your network.
 
 ## How the API was discovered

@@ -7,7 +7,7 @@ import time
 import logging
 from datetime import datetime
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from urllib3.util.retry import Retry
 
 # Constants
 LOG_FILE_NAME = 'avshype.log'
@@ -36,6 +36,7 @@ def send_poweron():
     json_result = json.dumps(message)
     logging.info(f"Sending: {json_result}")
     sock.sendto(bytes(json_result, "utf-8"), (group, port))
+    sock.close()
 
 
 def send_razer_command(pt):
@@ -48,6 +49,7 @@ def send_razer_command(pt):
     json_result = json.dumps(message)
     logging.info(f"Sending: {json_result}")
     sock.sendto(bytes(json_result, "utf-8"), (group, port))
+    sock.close()
 
 
 def send_message():
@@ -60,6 +62,7 @@ def send_message():
     json_result = json.dumps(message)
     logging.info(f"Sending: {json_result}")
     sock.sendto(bytes(json_result, "utf-8"), (group, port))
+    sock.close()
 
 
 def get_with_retries(url, retries=3):
@@ -92,7 +95,12 @@ def is_colorado_avalanche_playing():
     if not response:
         return False
 
-    schedule_data = response.json()
+    try:
+        schedule_data = response.json()
+    except json.JSONDecodeError as e:
+        logging.error(f"Error parsing JSON response: {e}")
+        return False
+
     game_week = schedule_data.get("gameWeek")
 
     if not game_week:

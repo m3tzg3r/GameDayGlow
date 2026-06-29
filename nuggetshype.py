@@ -7,7 +7,7 @@ import time
 import logging
 from datetime import datetime
 from requests.adapters import HTTPAdapter
-from requests.packages.urllib3.util.retry import Retry
+from urllib3.util.retry import Retry
 
 # Constants
 LOG_FILE_NAME = 'NuggetsHype.log'
@@ -37,6 +37,7 @@ def send_poweron():
     json_result = json.dumps(message)
     logging.info(f"Sending: {json_result}")
     sock.sendto(bytes(json_result, "utf-8"), (group, port))
+    sock.close()
 
 
 def send_razer_command(pt):
@@ -49,6 +50,7 @@ def send_razer_command(pt):
     json_result = json.dumps(message)
     logging.info(f"Sending: {json_result}")
     sock.sendto(bytes(json_result, "utf-8"), (group, port))
+    sock.close()
 
 
 def send_keepalive():
@@ -61,6 +63,7 @@ def send_keepalive():
     json_result = json.dumps(message)
     logging.info(f"Sending: {json_result}")
     sock.sendto(bytes(json_result, "utf-8"), (group, port))
+    sock.close()
 
 
 def get_with_retries(url, retries=3):
