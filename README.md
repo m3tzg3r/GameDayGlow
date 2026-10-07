@@ -45,7 +45,7 @@ Yes. You own the device, it is on your local network, and you are sending UDP pa
 
 - **NHL** -- `api-web.nhle.com` (Colorado Avalanche, team ID 21)
 - **ESPN** -- `site.api.espn.com` (Denver Broncos, team ID 7)
-- **NBA CDN** -- `cdn.nba.com` (Denver Nuggets, team abbreviation DEN)
+- **ESPN NBA scoreboard** -- `site.api.espn.com` (Denver Nuggets, team abbreviation DEN; v2). The v1 `nuggetshype.py` still uses `cdn.nba.com`, which now returns 403 to non-browser clients
 
 ## Requirements
 
